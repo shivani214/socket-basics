@@ -6,7 +6,7 @@ var http = require('http').Server(app);
 var io = require('socket.io')(http);
 
 
-app.use(express.static(__dirname + '/public')); 
+app.use(express.static(__dirname + '/public'));
 var clientInfo = {};
 
 // Sends current users to provided socket
@@ -14,28 +14,40 @@ function sendCurrentUsers(socket) {
     var info = clientInfo[socket.id];
     var users = [];
 
-    if (typeof info === 'undefined') {
+    if ( info === undefined) {
         return;
     }
 
     Object.keys(clientInfo).forEach(function (socketId) {
-        var userinfo = clientInfo[socketId];
+        var userInfo = clientInfo[socketId];
 
-        if (info.room === userinfo.room) {
-            users.push(userinfo.name);
+        if (info.room === userInfo.room) {
+            users.push(userInfo.name);
         }
     });
 
     socket.emit('message', {
         name: 'System',
-        text: 'Current users: ' + users.join(', '),
+        text: 'Current users: ' + users.join(', ').trim(),
         timestamp: moment().valueOf()
 
-    });
+    })
 }
 
 io.on('connection', function (socket) {
     console.log('User connected via socket.io!');
+
+    // On joining room after user is connected
+    socket.on('joinRoom', function (req) {
+        clientInfo[socket.id] = req;
+        socket.join(req.room);
+        socket.broadcast.to(req.room).emit('message', {
+            name: 'System',
+            text: req.name + ' has joined!',
+            timestamp: moment().valueOf()
+        });
+    });
+//Disconnect
     socket.on('disconnect', function () {
         var userData = clientInfo[socket.id];
 
@@ -49,16 +61,14 @@ io.on('connection', function (socket) {
             delete clientInfo[socket.id];
         }
     });
-    socket.on('joinRoom', function (req) {
-        clientInfo[socket.id] = req;
-        socket.join(req.room);
-        socket.broadcast.to(req.room).emit('message', {
-            name: 'System',
-            text: req.name + ' has joined',
-            timestamp: moment().valueOf()
-        });
+
+    socket.emit('message', {
+        name: 'System',
+        text: 'Welcome to the chat application!',
+        timestamp: moment().valueOf()
     });
 
+    // Message received on server
     socket.on('message', function (message) {
         console.log('Message recieved: ' + message.text);
 
@@ -67,15 +77,9 @@ io.on('connection', function (socket) {
         } else {
             message.timestamp = moment().valueOf();
             io.to(clientInfo[socket.id].room).emit('message', message);
-
         }
+    });
 
-    });
-    socket.emit('message', {
-        name: 'System',
-        text: 'Welcome to the chat application!',
-        timestamp: moment().valueOf()
-    });
 });
 
 http.listen(PORT, function () {
